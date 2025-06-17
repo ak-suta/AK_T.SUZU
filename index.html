@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>宮城県北部 自治体別・公共工事分析ダッシュボード</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Calm Harmony (Stone neutrals with Teal accent) -->
+    <!-- Application Structure Plan: A top-down dashboard structure. The user first sees a high-level comparison of all municipalities' public works budgets via a bar chart. Clicking a municipality dynamically updates a detailed section below, showing a budget breakdown donut chart and actionable sales strategy cards. This flow allows for both quick comparison and deep-dives, directly supporting the salesman's need to identify and analyze opportunities efficiently. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Total public works budget per municipality. -> Goal: Compare scale. -> Viz: Bar Chart. -> Interaction: Click to select. -> Justification: Easiest way to see who has the most money to spend. -> Library: Chart.js.
+        - Report Info: Breakdown of construction budget. -> Goal: Understand spending priorities. -> Viz: Donut Chart. -> Interaction: Hover for details. -> Justification: Clear part-to-whole visualization for a single entity. -> Library: Chart.js.
+        - Report Info: Upcoming project types and target contractors. -> Goal: Provide actionable sales intelligence. -> Viz: HTML Cards. -> Interaction: Read-only. -> Justification: Textual information needs clear, structured formatting, not a chart. -> Library/Method: Tailwind CSS for styling.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 400px;
+            max-height: 50vh;
+        }
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 300px;
+            }
+        }
+        .section-title {
+            border-left: 5px solid #0d9488; /* teal-600 */
+            padding-left: 1rem;
+        }
+        .selected-bar {
+            border: 3px solid #ccfbf1; /* teal-100 */
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body class="text-slate-700">
+
+    <header class="bg-white shadow-md">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <h1 class="text-2xl md:text-3xl font-bold text-teal-700">宮城県北部 自治体別・公共工事分析ダッシュボード</h1>
+            <p class="mt-1 text-slate-600">建設機械レンタル営業戦略立案支援ツール (令和6年度当初予算ベース)</p>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <section id="overview" class="mb-12">
+            <h2 class="text-xl md:text-2xl font-bold mb-4 section-title">1. 全体比較：普通建設事業費</h2>
+            <p class="mb-6 text-slate-600">
+                下記は、各自治体の公共工事関連予算（普通建設事業費）の規模を示したグラフです。棒グラフをクリックすると、自治体ごとの詳細な分析（予算の内訳、想定される工事、営業ターゲット）が表示されます。予算規模の大きい自治体ほど、大規模な工事や多様な案件が期待できます。
+            </p>
+            <div class="bg-white p-4 rounded-lg shadow">
+                <div class="chart-container">
+                    <canvas id="mainComparisonChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <section id="detail" class="transition-opacity duration-500 ease-in-out">
+            <h2 class="text-xl md:text-2xl font-bold mb-4 section-title">2. 個別分析：<span id="detail-title" class="text-teal-700"></span></h2>
+            
+            <div id="detail-content-wrapper" class="opacity-0 transition-opacity duration-500 ease-in-out">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    <div class="bg-white p-4 rounded-lg shadow text-center">
+                        <h3 class="text-sm font-bold text-slate-500">人口</h3>
+                        <p id="stat-population" class="text-2xl font-bold text-teal-600"></p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow text-center">
+                        <h3 class="text-sm font-bold text-slate-500">面積</h3>
+                        <p id="stat-area" class="text-2xl font-bold text-teal-600"></p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow text-center">
+                        <h3 class="text-sm font-bold text-slate-500">当初予算総額</h3>
+                        <p id="stat-budget-total" class="text-2xl font-bold text-teal-600"></p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow text-center">
+                        <h3 class="text-sm font-bold text-slate-500">普通建設事業費</h3>
+                        <p id="stat-budget-construction" class="text-2xl font-bold text-teal-600"></p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                    <div class="lg:col-span-2 bg-white p-4 rounded-lg shadow">
+                        <h3 class="font-bold text-lg mb-2">普通建設事業費の内訳</h3>
+                        <p class="text-sm text-slate-600 mb-4">
+                            どの分野に重点的に予算が配分されているかを確認できます。土木費や教育費の割合が高い場合、インフラ整備や学校施設の改修などが活発である可能性を示します。
+                        </p>
+                        <div class="chart-container" style="height: 320px;">
+                            <canvas id="budgetBreakdownChart"></canvas>
+                        </div>
+                    </div>
+                    <div id="sales-strategy" class="lg:col-span-3 space-y-4">
+                        <h3 class="font-bold text-lg mb-2">年度後半の営業戦略</h3>
+                        <p class="text-sm text-slate-600 mb-4">
+                            予算の内訳から想定される主要な工事分野と、それに対応する営業ターゲット・レンタル需要の高い建設機械を分析しています。
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div id="detail-placeholder" class="text-center py-16 bg-white rounded-lg shadow">
+                <p class="text-slate-500">上のグラフで自治体を選択してください。</p>
+            </div>
+        </section>
+
+    </main>
+    
+    <footer class="bg-slate-800 text-white mt-12 py-4">
+        <div class="container mx-auto px-4 text-center text-sm">
+            <p>&copy; 2024 Public Works Analysis Dashboard. All rights reserved.</p>
+            <p class="text-slate-400 text-xs mt-1">このデータは公開情報に基づいた分析であり、内容の正確性を保証するものではありません。</p>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const municipalitiesData = [
+                { id: 'osaki', name: '大崎市', population: '120,767人', area: '796.8km²', budgetTotal: '820.5億円', budgetConstruction: 78.4, budgetBreakdown: { labels: ['土木費', '農林水産費', '教育費', '衛生費', 'その他'], data: [35.2, 18.5, 12.3, 6.8, 5.6] }, salesStrategy: [ { field: '道路・橋梁整備', projects: '市道の維持補修、橋梁の長寿命化対策工事', target: '市内に拠点を置く中堅・中小の土木工事業者', machinery: 'アスファルトフィニッシャー, タイヤローラー, 路面切削機, 4tトラック' }, { field: '農業基盤整備', projects: 'ほ場整備、農業用排水路の更新', target: '土地改良事業に実績のある専門工事業者', machinery: 'ブルドーザー, バックホー(0.7m³), レーザーレベラー' }, { field: '学校施設の改修', projects: '小中学校の空調設備更新、トイレの洋式化、外壁改修', target: '建築・管・電気工事の地元業者、地場ゼネコン', machinery: '高所作業車, ミニクレーン, 発電機' } ] },
+                { id: 'kurihara', name: '栗原市', population: '59,977人', area: '805.0km²', budgetTotal: '519.8億円', budgetConstruction: 65.5, budgetBreakdown: { labels: ['土木費', '農林水産費', '災害復旧費', '教育費', 'その他'], data: [25.1, 15.3, 10.5, 8.2, 6.4] }, salesStrategy: [ { field: '河川・砂防事業', projects: '河川改修、砂防ダムの維持管理', target: '河川工事の経験が豊富な土木工事業者', machinery: '大型バックホー, クレーン, 不整地運搬車' }, { field: '林道整備', projects: '林道の新設・改良工事', target: '林業土木に特化した業者', machinery: 'フォワーダ, プロセッサ, スイングヤーダ' } ] },
+                { id: 'tome', name: '登米市', population: '73,346人', area: '536.1km²', budgetTotal: '556.0億円', budgetConstruction: 68.2, budgetBreakdown: { labels: ['土木費', '農林水産費', '教育費', '商工費', 'その他'], data: [30.1, 20.2, 9.8, 5.1, 3.0] }, salesStrategy: [ { field: '道路ネットワーク整備', projects: '幹線道路の改良、バイパス関連工事', target: '広域で活動する中堅ゼネコン、舗装専門業者', machinery: '大型アスファルトフィニッシャー, モーターグレーダー' }, { field: '公共施設の再編', projects: '老朽化した支所の解体、複合施設への集約化工事', target: '建築・解体工事の実績がある地場ゼネコン', machinery: '解体用重機(ロングアーム), 大型ダンプ, 散水車' } ] },
+                { id: 'tomiya', name: '富谷市', population: '51,911人', area: '49.2km²', budgetTotal: '272.8億円', budgetConstruction: 45.1, budgetBreakdown: { labels: ['都市計画費', '土木費', '教育費', '民生費', 'その他'], data: [18.5, 12.3, 8.1, 4.2, 2.0] }, salesStrategy: [ { field: '宅地造成・区画整理', projects: '新市街地におけるインフラ整備（上下水道、道路）', target: '宅地造成の実績豊富なデベロッパー、サブコン', machinery: 'バックホー(0.45m³), 10tダンプ, 振動ローラー' }, { field: '公園・緑地整備', projects: '新規公園の設置、既存公園の遊具更新', target: '造園業者、景観工事を専門とする業者', machinery: 'ミニバックホー, スキッドステアローダー, 芝刈り機' } ] },
+                { id: 'wakuya', name: '涌谷町', population: '14,792人', area: '82.2km²', budgetTotal: '113.1億円', budgetConstruction: 15.8, budgetBreakdown: { labels: ['土木費', '農林水産費', '教育費', 'その他'], data: [6.5, 4.2, 2.8, 2.3] }, salesStrategy: [ { field: '上下水道管の更新', projects: '老朽化した水道管・下水道管の布設替工事', target: '管工事を専門とする地元業者', machinery: 'ミニバックホー(3tクラス), プレートコンパクター, 2tダンプ' } ] },
+                { id: 'misato', name: '美里町', population: '22,969人', area: '75.0km²', budgetTotal: '159.9億円', budgetConstruction: 22.4, budgetBreakdown: { labels: ['土木費', '農林水産費', '教育費', 'その他'], data: [9.8, 7.1, 3.5, 2.0] }, salesStrategy: [ { field: '圃場整備・用排水路改修', projects: '農業生産性向上のための基盤整備', target: '土地改良区から受注する地元の土木工事業者', machinery: 'バックホー, ブルドーザー, トラクター' } ] },
+                { id: 'kami', name: '加美町', population: '21,080人', area: '460.7km²', budgetTotal: '177.3億円', budgetConstruction: 25.6, budgetBreakdown: { labels: ['土木費', '農林水産費', '災害復旧費', 'その他'], data: [10.2, 8.5, 4.1, 2.8] }, salesStrategy: [ { field: '災害に強いまちづくり', projects: '河川の護岸工事、急傾斜地の崩壊対策', target: '防災工事に実績のある土木工事業者', machinery: '法面バケット, クレーン付きトラック, コンクリートポンプ車' } ] },
+                { id: 'shikama', name: '色麻町', population: '6,432人', area: '109.2km²', budgetTotal: '63.9億円', budgetConstruction: 9.8, budgetBreakdown: { labels: ['土木費', '農林水産費', '教育費', 'その他'], data: [4.1, 2.9, 1.5, 1.3] }, salesStrategy: [ { field: '町道の維持管理', projects: '定期的な舗装補修、側溝清掃・修繕', target: '小回りの利く地元の小規模工事業者', machinery: '小型ローラー, パッチングカー, バックホー(0.25m³)' } ] },
+                { id: 'taiwa', name: '大和町', population: '27,882人', area: '225.5km²', budgetTotal: '191.0億円', budgetConstruction: 33.7, budgetBreakdown: { labels: ['土木費', '都市計画費', '教育費', 'その他'], data: [13.5, 9.2, 6.8, 4.2] }, salesStrategy: [ { field: '工業団地関連整備', projects: '進出企業のためのアクセス道路、調整池整備', target: '大規模造成に対応できる中堅ゼネコン', machinery: '大型ブルドーザー, スクレイパー, 自走式破砕機' }, { field: '子育て支援施設整備', projects: '認定こども園の新設・増築', target: '建築工事に強い地場ゼネコン・工務店', machinery: 'タワークレーン(小型), コンクリートポンプ車, 高所作業車' } ] },
+                { id: 'osato', name: '大郷町', population: '7,557人', area: '82.0km²', budgetTotal: '61.7億円', budgetConstruction: 8.5, budgetBreakdown: { labels: ['土木費', '農林水産費', '総務費', 'その他'], data: [3.8, 2.5, 1.2, 1.0] }, salesStrategy: [ { field: '公共施設の長寿命化', projects: '町役場、公民館等の屋根・外壁改修', target: '建築改修を得意とする地元の工務店', machinery: '仮設足場, 高所作業車, 塗装用機器' } ] },
+                { id: 'ohira', name: '大衡村', population: '5,918人', area: '60.3km²', budgetTotal: '124.8億円', budgetConstruction: 55.3, budgetBreakdown: { labels: ['土木費', '企業誘致関連', '教育費', 'その他'], data: [25.1, 20.5, 5.2, 4.5] }, salesStrategy: [ { field: '大規模工場誘致に伴うインフラ整備', projects: '工業団地内の道路、上下水道、電力網の敷設', target: 'プラント・インフラ工事に強い大手・中堅ゼネコン', machinery: 'オールテレーンクレーン, シールドマシン, 各種配管機械' }, { field: '関連従業員向け住宅地開発', projects: '宅地造成、アクセス道路整備', target: 'ハウスメーカー、デベロッパー', machinery: 'バックホー, 10tダンプ, 転圧機械全般' } ] },
+            ];
+
+            const mainChartCtx = document.getElementById('mainComparisonChart').getContext('2d');
+            const detailChartCtx = document.getElementById('budgetBreakdownChart').getContext('2d');
+            let mainChart, detailChart;
+            let selectedMunicipalityId = 'osaki';
+
+            const chartBGColors = ['#0d9488', '#0f766e', '#115e59', '#134e4a', '#14532d'];
+            const chartHoverBGColors = ['#0f766e', '#115e59', '##134e4a', '#14532d', '#166534'];
+
+            function createMainChart() {
+                const data = {
+                    labels: municipalitiesData.map(m => m.name),
+                    datasets: [{
+                        label: '普通建設事業費 (億円)',
+                        data: municipalitiesData.map(m => m.budgetConstruction),
+                        backgroundColor: (context) => {
+                             const municipality = municipalitiesData[context.dataIndex];
+                             return municipality.id === selectedMunicipalityId ? '#0d9488' : '#9ca3af'; // teal-600 vs gray-400
+                        },
+                        borderColor: '#f1f5f9', // slate-100
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    }]
+                };
+
+                mainChart = new Chart(mainChartCtx, {
+                    type: 'bar',
+                    data: data,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                title: { display: true, text: '予算額 (億円)' }
+                            },
+                            y: { grid: { display: false } }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: { label: (context) => `${context.dataset.label}: ${context.raw} 億円` }
+                            }
+                        },
+                        onClick: (event, elements) => {
+                            if (elements.length > 0) {
+                                const index = elements[0].index;
+                                selectedMunicipalityId = municipalitiesData[index].id;
+                                updateDetailView(selectedMunicipalityId);
+                                mainChart.data.datasets[0].backgroundColor = municipalitiesData.map((m, i) => i === index ? '#0d9488' : '#9ca3af');
+                                mainChart.update();
+                            }
+                        }
+                    }
+                });
+            }
+
+            function createDetailChart(data) {
+                if (detailChart) {
+                    detailChart.destroy();
+                }
+                detailChart = new Chart(detailChartCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: '予算内訳',
+                            data: data.data,
+                            backgroundColor: chartBGColors,
+                            hoverBackgroundColor: chartHoverBGColors,
+                            borderColor: '#ffffff',
+                            borderWidth: 2,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom' },
+                            tooltip: {
+                                callbacks: {
+                                    label: (context) => `${context.label}: ${context.raw} 億円`
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            function updateDetailView(id) {
+                const data = municipalitiesData.find(m => m.id === id);
+                if (!data) return;
+                
+                document.getElementById('detail-placeholder').classList.add('hidden');
+                const detailContent = document.getElementById('detail-content-wrapper');
+                detailContent.classList.remove('opacity-0');
+
+                document.getElementById('detail-title').textContent = data.name;
+                document.getElementById('stat-population').textContent = data.population;
+                document.getElementById('stat-area').textContent = data.area;
+                document.getElementById('stat-budget-total').textContent = data.budgetTotal;
+                document.getElementById('stat-budget-construction').textContent = `${data.budgetConstruction} 億円`;
+
+                createDetailChart(data.budgetBreakdown);
+                
+                const strategyContainer = document.getElementById('sales-strategy');
+                // Remove existing content except for the title and description
+                while (strategyContainer.children.length > 2) {
+                    strategyContainer.removeChild(strategyContainer.lastChild);
+                }
+                
+                data.salesStrategy.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = 'bg-white p-5 rounded-lg shadow transform hover:scale-105 transition-transform duration-300';
+                    card.innerHTML = `
+                        <h4 class="font-bold text-teal-700 text-lg">${item.field}</h4>
+                        <div class="mt-3">
+                            <p class="font-semibold text-sm text-slate-600">📄 想定される工事</p>
+                            <p class="mt-1 text-slate-700 text-sm pl-2 border-l-2 border-slate-200">${item.projects}</p>
+                        </div>
+                        <div class="mt-3">
+                            <p class="font-semibold text-sm text-slate-600">🎯 営業ターゲット業者</p>
+                            <p class="mt-1 text-slate-700 text-sm pl-2 border-l-2 border-slate-200">${item.target}</p>
+                        </div>
+                        <div class="mt-3">
+                            <p class="font-semibold text-sm text-slate-600">🚚 需要が見込まれる機械</p>
+                            <p class="mt-1 text-slate-700 text-sm pl-2 border-l-2 border-slate-200">${item.machinery}</p>
+                        </div>
+                    `;
+                    strategyContainer.appendChild(card);
+                });
+
+                // Scroll to the detail section on smaller screens
+                if (window.innerWidth < 768) {
+                    document.getElementById('detail').scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+            
+            createMainChart();
+            updateDetailView(selectedMunicipalityId); 
+        });
+    </script>
+</body>
+</html>
